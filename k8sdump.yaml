@@ -1,0 +1,52 @@
+kubeConfig: /Users/rsann/.config/k3d/rancher/kubeconfig.yaml
+dumps:
+  - gvr:
+      group: management.cattle.io
+      version: v3
+      resource: users
+    filters:
+      ors:
+        - key: username
+          value: alice
+        - key: username
+          value: bob
+  - gvr:
+      group: management.cattle.io
+      version: v3
+      resource: clusterroletemplatebindings
+    filters:
+      ors:
+        - key: userName
+          value: u-4qdsz
+        - key: userName
+          value: u-grqlt
+  - gvr:
+      group: management.cattle.io
+      version: v3
+      resource: projectroletemplatebindings
+    filters:
+      ors:
+        - key: userName
+          value: u-4qdsz
+        - key: userName
+          value: u-grqlt
+  - gvr:
+      group: rbac.authorization.k8s.io
+      version: v1
+      resource: rolebindings
+    filters:
+      ors:
+        - key: subjects.0.name
+          value: u-4qdsz
+        - key: subjects.0.name
+          value: u-grqlt
+  - gvr:
+      group: rbac.authorization.k8s.io
+      version: v1
+      resource: clusterrolebindings
+    filters:
+      ors:
+        - key: subjects.0.name
+          value: u-4qdsz
+        - key: subjects.0.name
+          value: u-grqlt
