@@ -19,7 +19,7 @@ Otherwise you can use:
 
 ## Filters
 
-Each resource dump is defined by a GroupVersionResource and Namespace:
+Each resource dump is defined by a group version resource (gvr), namespace, and filters:
 
 ```yaml
 dumps:
@@ -27,6 +27,7 @@ dumps:
       group: management.cattle.io
       version: v3
       resource: users
+    namespace: ''
     filters:
       ors:
         - key: username
