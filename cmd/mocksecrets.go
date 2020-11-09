@@ -38,7 +38,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	logrus.Debugf("running mocksecrets command")
+	logrus.Debug("running mocksecrets command")
 
 	cli, err := k8s.GetClient(kubeConfig)
 	if err != nil {
@@ -77,7 +77,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 			logrus.Debugf("starting worker %v", j)
 			defer wg.Done()
 			for i := range jobs {
-				logrus.Debugf("creating secret: %v", i)
+				logrus.Debugf("worker %v creating secret %v", j, i)
 				s := genRandomSecret(i)
 				_, err := cli.CoreV1().Secrets(namespace).Create(context.Background(), &s, v1.CreateOptions{})
 				if err != nil {

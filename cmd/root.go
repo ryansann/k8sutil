@@ -27,6 +27,9 @@ func run(cmd *cobra.Command, args []string) {
 	if debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
+
+	logrus.Debugf("running root command")
+
 	logrus.Debugf("using kubeconfig: %s", kubeConfig)
 }
 
