@@ -1,0 +1,21 @@
+dumps:
+  - gvr:
+      group: management.cattle.io
+      version: v3
+      resource: users
+    filters:
+      ors:
+        - key: username
+          value: alice
+        - key: username
+          value: bob
+  - gvr:
+      group: rbac.authorization.k8s.io
+      version: v1
+      resource: rolebindings
+    filters:
+      ors:
+        - key: subjects.0.name
+          value: u-4qdsz
+        - key: subjects.0.name
+          value: u-grqlt

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/ryansann/k8sdump/config"
+	"github.com/ryansann/k8sutil/config"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,11 +13,11 @@ import (
 )
 
 // GetDumps returns a map of resource dumps that satisfy GVRs and filters, map is keyed by resource
-func GetDumps(cfg config.Root) (map[string]interface{}, error) {
+func GetDumps(kubeConfig string, cfg config.DumpCommand) (map[string]interface{}, error) {
 	dumps := make(map[string]interface{}, 0)
 
 	for _, dump := range cfg.Dumps {
-		cli, err := GetClient(cfg.KubeConfig, dump.GVR)
+		cli, err := GetDynamicClient(kubeConfig, dump.GVR)
 		if err != nil {
 			return nil, err
 		}

@@ -1,71 +1,31 @@
 package cmd
 
 import (
-	"encoding/json"
-	"fmt"
-
-	"github.com/ryansann/k8sdump/config"
-	"github.com/ryansann/k8sdump/k8s"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "k8sdump",
-	Short: "k8sdump dumps resources from a k8s cluster",
+	Use:   "k8sutil",
+	Short: "k8sutil performs helper operations on a kubernetes cluster",
 	Run:   run,
+}
+
+var (
+	kubeConfig string
+)
+
+func init() {
+	rootCmd.AddCommand(dumpCmd, mockSecretsCmd)
+	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "./kube.config", "Kubeconfig file for cluster")
 }
 
 // run executes the steps required to dump resources
 func run(cmd *cobra.Command, args []string) {
-	cfgbytes, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	logrus.Debugf("config:\n%v\n", string(cfgbytes))
-
-	dumps, err := k8s.GetDumps(cfg)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	dbytes, err := json.MarshalIndent(dumps, "", "  ")
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	fmt.Println(string(dbytes))
+	logrus.Debugf("using kubeconfig: %s", kubeConfig)
 }
 
-var (
-	cfgFile string
-	cfg     config.Root
-)
-
-func init() {
-	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config-file", "c", "./k8sdump.yaml", "Path to k8sdump config file")
-}
-
-func initConfig() {
-	logrus.Debugf("using config file: %v", cfgFile)
-
-	viper.SetConfigFile(cfgFile)
-
-	err := viper.ReadInConfig()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-
-	err = viper.Unmarshal(&cfg)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-}
-
-// Execute runs the k8sdump root command
+// Execute runs the k8sutil root command
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		logrus.Fatal(err)

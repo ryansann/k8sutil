@@ -5,12 +5,28 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
 // GetClient returns a dynamic client to cluster defined by kubeconfig for the GVR passed in.
-func GetClient(kubeconfig string, gvr schema.GroupVersionResource) (dynamic.NamespaceableResourceInterface, error) {
+func GetClient(kubeconfig string) (*kubernetes.Clientset, error) {
+	config, err := getConfig(kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	return clientset, nil
+}
+
+// GetDynamicClient returns a dynamic client to cluster defined by kubeconfig for the GVR passed in.
+func GetDynamicClient(kubeconfig string, gvr schema.GroupVersionResource) (dynamic.NamespaceableResourceInterface, error) {
 	config, err := getConfig(kubeconfig)
 	if err != nil {
 		return nil, err
