@@ -20,7 +20,6 @@ func init() {
 	rootCmd.AddCommand(dumpCmd, mockSecretsCmd)
 	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "./kube.config", "Kubeconfig file for cluster")
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
-
 }
 
 // run executes the steps required to dump resources

@@ -43,6 +43,10 @@ func initConfig() {
 }
 
 func runDump(cmd *cobra.Command, args []string) {
+	if debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
 	cobra.OnInitialize(initConfig)
 
 	dumps, err := k8s.GetDumps(kubeConfig, cfg)

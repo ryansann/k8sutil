@@ -11,11 +11,15 @@ import (
 )
 
 // GetClient returns a dynamic client to cluster defined by kubeconfig for the GVR passed in.
-func GetClient(kubeconfig string) (*kubernetes.Clientset, error) {
-	config, err := getConfig(kubeconfig)
+func GetClient(kubeConfig string) (*kubernetes.Clientset, error) {
+	config, err := getConfig(kubeConfig)
 	if err != nil {
 		return nil, err
 	}
+
+	// hack for: x509: certificate signed by unknown authority
+	config.TLSClientConfig.Insecure = true
+	config.TLSClientConfig.CAData = nil
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
@@ -26,8 +30,8 @@ func GetClient(kubeconfig string) (*kubernetes.Clientset, error) {
 }
 
 // GetDynamicClient returns a dynamic client to cluster defined by kubeconfig for the GVR passed in.
-func GetDynamicClient(kubeconfig string, gvr schema.GroupVersionResource) (dynamic.NamespaceableResourceInterface, error) {
-	config, err := getConfig(kubeconfig)
+func GetDynamicClient(kubeConfig string, gvr schema.GroupVersionResource) (dynamic.NamespaceableResourceInterface, error) {
+	config, err := getConfig(kubeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -41,11 +45,11 @@ func GetDynamicClient(kubeconfig string, gvr schema.GroupVersionResource) (dynam
 }
 
 // getConfig returns the kubernetes rest.Config for the cluster.
-func getConfig(kubeconfig string) (*rest.Config, error) {
-	kubeconfig, err := filepath.Abs(kubeconfig)
+func getConfig(kubeConfig string) (*rest.Config, error) {
+	kubeConfig, err := filepath.Abs(kubeConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	return clientcmd.BuildConfigFromFlags("", kubeconfig)
+	return clientcmd.BuildConfigFromFlags("", kubeConfig)
 }

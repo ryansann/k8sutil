@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/ryansann/k8sutil/k8s"
@@ -28,11 +29,17 @@ var (
 
 func init() {
 	mockSecretsCmd.PersistentFlags().IntVarP(&numSecrets, "num-secrets", "n", 100, "Number of secrets to create")
-	mockSecretsCmd.PersistentFlags().IntVarP(&numSecrets, "num-workers", "w", 10, "Number of workers to create secrets")
+	mockSecretsCmd.PersistentFlags().IntVarP(&numWorkers, "num-workers", "w", 10, "Number of workers to create secrets")
 	mockSecretsCmd.PersistentFlags().StringVar(&namespace, "ns", "default", "Namespace to create secrets in")
 }
 
 func runMockSecrets(cmd *cobra.Command, args []string) {
+	if debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
+	logrus.Debugf("running mocksecrets command")
+
 	cli, err := k8s.GetClient(kubeConfig)
 	if err != nil {
 		logrus.Fatal(err)
@@ -60,11 +67,15 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	}()
 
 	// buffered channel for work
-	jobs := make(chan int, numSecrets)
+	jobs := make(chan int, numWorkers)
 
 	// spawn workers
-	for j := 0; j < numWorkers; j++ {
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+	for j := 1; j <= numWorkers; j++ {
 		go func() {
+			logrus.Debugf("starting worker %v", j)
+			defer wg.Done()
 			for i := range jobs {
 				logrus.Debugf("creating secret: %v", i)
 				s := genRandomSecret(i)
@@ -80,8 +91,9 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	for i := 1; i <= numSecrets; i++ {
 		jobs <- i
 	}
-
 	close(jobs) // exit condition for workers
+
+	wg.Wait() // wait for workers to exit
 }
 
 // genRandomSecret creates a secret with random data
