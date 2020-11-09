@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ryansann/k8sutil/k8s"
@@ -39,6 +38,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 		logrus.Fatal(err)
 	}
 
+	// check if namespace exists, create it if it doesn't
 	_, err = cli.CoreV1().Namespaces().Get(context.Background(), namespace, v1.GetOptions{})
 	if errors.IsNotFound(err) { // create if not found
 		ns, err := cli.CoreV1().Namespaces().Create(context.Background(), &corev1.Namespace{ObjectMeta: v1.ObjectMeta{Name: namespace}}, v1.CreateOptions{})
@@ -50,18 +50,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 		logrus.Fatal(err)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	c := make(chan int, numSecrets)
-	go func() {
-		defer wg.Done()
-		for i := 1; i <= numSecrets; i++ {
-			c <- i
-		}
-	}()
-
-	wg.Wait()
-
+	// error logging
 	e := make(chan error, 1)
 	defer close(e)
 	go func() {
@@ -70,9 +59,13 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 		}
 	}()
 
+	// buffered channel for work
+	jobs := make(chan int, numSecrets)
+
+	// spawn workers
 	for j := 0; j < numWorkers; j++ {
 		go func() {
-			for i := range c {
+			for i := range jobs {
 				logrus.Debugf("creating secret: %v", i)
 				s := genRandomSecret(i)
 				_, err := cli.CoreV1().Secrets(namespace).Create(context.Background(), &s, v1.CreateOptions{})
@@ -83,9 +76,15 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 		}()
 	}
 
-	close(c)
+	// push work onto jobs channel
+	for i := 1; i <= numSecrets; i++ {
+		jobs <- i
+	}
+
+	close(jobs) // exit condition for workers
 }
 
+// genRandomSecret creates a secret with random data
 func genRandomSecret(i int) corev1.Secret {
 	randData := sha256.Sum256([]byte(fmt.Sprintf("%v", time.Now().UnixNano())))
 	return corev1.Secret{
