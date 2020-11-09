@@ -1,23 +1,25 @@
-# k8sdump
+# k8sutil
 
 ## Overview
 
-This command can be used to dump Kubernetes resources from a cluster. It reads a config file to determine where your kubeconfig 
-file is and what resources you want dumped. I built this for debugging and dumping related k8s resources for analysis.
+This command line utility can be used for dumping kubernetes resources from a cluster and creating secrets in bulk.
+More commands will likely be added in the future. This is primarily used to automate certain tedious tasks I've encountered in my day to day at Rancher.
 
-## Build
+## Mocksecrets
 
-Use: `make build`
-
-## Run
-
-If you want to use the default config file location, `./k8sdump.yaml` then you can use: `make run`
-
-Otherwise you can use: 
+To use the mocksecrets command:
 - `make build`
-- `k8sdump --config-file <path>`
+- `./k8sutil --kube-config <path> --debug mocksecrets --num-secrets 1000 --num-workers 50 --namespace secrets-testing`
 
-## Filters
+If the specified namespace does not exist, it will be created.
+
+## Dump
+
+To use the dump command:
+- `make build`
+- `./k8sutil --kube-config <path> --debug dump --config <path>`
+
+### Filters
 
 Each resource dump is defined by a group version resource (gvr), namespace, and filters:
 
