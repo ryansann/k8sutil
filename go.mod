@@ -1,4 +1,4 @@
-module github.com/ryansann/k8sdump
+module github.com/ryansann/k8sutil
 
 go 1.14
 
