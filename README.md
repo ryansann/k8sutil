@@ -44,3 +44,5 @@ dumps:
 If namespace is omitted, as it is above, it will default to dumping the GVRs from all namespaces. The filters section defines 
 a way for the list of GVRs to be filtered after it is retrieved from the api server. The filters key should be a [gjson](https://github.com/tidwall/gjson) path
 that evaluates to a string. In order for a resource to pass the filtering criteria, it must satisfy at least 1 or condition as well as all and conditions.
+
+See [this file](examples/dump.yaml) for a more complete example.
