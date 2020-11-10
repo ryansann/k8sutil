@@ -12,7 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 var mockSecretsCmd = &cobra.Command{
@@ -46,9 +47,9 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	}
 
 	// check if namespace exists, create it if it doesn't
-	_, err = cli.CoreV1().Namespaces().Get(context.Background(), namespace, v1.GetOptions{})
+	_, err = cli.CoreV1().Namespaces().Get(context.Background(), namespace, metav1.GetOptions{})
 	if errors.IsNotFound(err) { // create if not found
-		ns, err := cli.CoreV1().Namespaces().Create(context.Background(), &corev1.Namespace{ObjectMeta: v1.ObjectMeta{Name: namespace}}, v1.CreateOptions{})
+		ns, err := cli.CoreV1().Namespaces().Create(context.Background(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
 		if err != nil {
 			logrus.Fatal(err)
 		}
@@ -80,7 +81,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 			for i := range jobs {
 				logrus.Debugf("worker %v creating secret %v", w, i)
 				s := genRandomSecret(i)
-				_, err := workerCli.CoreV1().Secrets(namespace).Create(context.Background(), &s, v1.CreateOptions{})
+				_, err := workerCli.CoreV1().Secrets(namespace).Create(context.Background(), &s, metav1.CreateOptions{})
 				if err != nil {
 					e <- err
 				}
@@ -95,15 +96,49 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	close(jobs) // exit condition for workers
 
 	wg.Wait() // wait for workers to exit
+
+	secrets, err := batchGetSecrets(cli, namespace)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	logrus.Infof("namespace %s has %v secrets", namespace, len(secrets))
 }
 
 // genRandomSecret creates a secret with random data
 func genRandomSecret(i int) corev1.Secret {
 	randData := sha256.Sum256([]byte(fmt.Sprintf("%v", time.Now().UnixNano())))
 	return corev1.Secret{
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("secret-%v", i),
 		},
 		Data: map[string][]byte{"password": randData[:]},
 	}
+}
+
+const (
+	secretBatchSize = 100
+)
+
+func batchGetSecrets(cli *kubernetes.Clientset, ns string) ([]corev1.Secret, error) {
+	var secrets []corev1.Secret
+	var continueToken string
+	for {
+		secretsList, err := cli.CoreV1().Secrets(ns).List(context.Background(), metav1.ListOptions{
+			Limit:    secretBatchSize,
+			Continue: continueToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		secrets = append(secrets, secretsList.Items...)
+
+		if secretsList.Continue == "" {
+			break
+		}
+
+		continueToken = secretsList.Continue
+	}
+	return secrets, nil
 }
