@@ -73,18 +73,19 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 	for j := 1; j <= numWorkers; j++ {
-		go func() {
-			logrus.Debugf("starting worker %v", j)
+		go func(w int) {
+			logrus.Debugf("starting worker %v", w)
+			workerCli, _ := k8s.GetClient(kubeConfig)
 			defer wg.Done()
 			for i := range jobs {
-				logrus.Debugf("worker %v creating secret %v", j, i)
+				logrus.Debugf("worker %v creating secret %v", w, i)
 				s := genRandomSecret(i)
-				_, err := cli.CoreV1().Secrets(namespace).Create(context.Background(), &s, v1.CreateOptions{})
+				_, err := workerCli.CoreV1().Secrets(namespace).Create(context.Background(), &s, v1.CreateOptions{})
 				if err != nil {
 					e <- err
 				}
 			}
-		}()
+		}(j)
 	}
 
 	// push work onto jobs channel
