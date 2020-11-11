@@ -5,19 +5,27 @@
 This command line utility can be used for dumping kubernetes resources from a cluster and creating secrets in bulk.
 More commands will likely be added in the future. This is primarily used to automate certain tedious tasks I've encountered in my day to day at Rancher.
 
+## Installation
+
+`go install`
+
 ## Mocksecrets
 
-To use the mocksecrets command:
-- `make build`
-- `./k8sutil --kube-config <path> --debug mocksecrets --num-secrets 1000 --num-workers 50 --namespace secrets-testing`
+Help:
+`k8sutil mocksecrets -h`
+
+Example:
+`k8sutil --kube-config <path> --debug mocksecrets --num-secrets 1000 --num-workers 50 --namespace secrets-testing --secret-size 150`
 
 If the specified namespace does not exist, it will be created.
 
 ## Dump
 
-To use the dump command:
-- `make build`
-- `./k8sutil --kube-config <path> --debug dump --config <path>`
+Help:
+`k8sutil dump -h`
+
+Example:
+`k8sutil --kube-config <path> --debug dump --config <path>`
 
 ### Filters
 
