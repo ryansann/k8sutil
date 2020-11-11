@@ -7,7 +7,7 @@ More commands will likely be added in the future. This is primarily used to auto
 
 ## Installation
 
-`go install`
+`go install github.com/ryansann/k8sutil`
 
 ## Mocksecrets
 
