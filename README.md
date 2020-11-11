@@ -11,20 +11,20 @@ More commands will likely be added in the future. This is primarily used to auto
 
 ## Mocksecrets
 
-Help:
+#### Help
 `k8sutil mocksecrets -h`
 
-Example:
+#### Example
 `k8sutil --kube-config <path> --debug mocksecrets --num-secrets 1000 --num-workers 50 --namespace secrets-testing --secret-size 150`
 
 If the specified namespace does not exist, it will be created.
 
 ## Dump
 
-Help:
+#### Help
 `k8sutil dump -h`
 
-Example:
+#### Example
 `k8sutil --kube-config <path> --debug dump --config <path>`
 
 ### Filters
