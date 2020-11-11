@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -25,12 +25,16 @@ var mockSecretsCmd = &cobra.Command{
 var (
 	numSecrets int
 	numWorkers int
+	secretSize int
+	seqStart   int
 	namespace  string
 )
 
 func init() {
 	mockSecretsCmd.PersistentFlags().IntVarP(&numSecrets, "num-secrets", "n", 100, "Number of secrets to create")
 	mockSecretsCmd.PersistentFlags().IntVarP(&numWorkers, "num-workers", "w", 10, "Number of workers to create secrets")
+	mockSecretsCmd.PersistentFlags().IntVarP(&secretSize, "secret-size", "s", 10, "How large the generated secret data is")
+	mockSecretsCmd.PersistentFlags().IntVar(&seqStart, "seq-start", 1, "Where to start the sequence for secret naming, e.g. secret-<seq-start>")
 	mockSecretsCmd.PersistentFlags().StringVar(&namespace, "ns", "default", "Namespace to create secrets in")
 }
 
@@ -79,8 +83,9 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 			workerCli, _ := k8s.GetClient(kubeConfig)
 			defer wg.Done()
 			for i := range jobs {
-				logrus.Debugf("worker %v creating secret %v", w, i)
-				s := genRandomSecret(i)
+				secretNum := seqStart + i
+				logrus.Debugf("worker %v creating secret %v", w, secretNum)
+				s := genRandomSecret(secretNum)
 				_, err := workerCli.CoreV1().Secrets(namespace).Create(context.Background(), &s, metav1.CreateOptions{})
 				if err != nil {
 					e <- err
@@ -90,7 +95,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	}
 
 	// push work onto jobs channel
-	for i := 1; i <= numSecrets; i++ {
+	for i := 0; i < numSecrets; i++ {
 		jobs <- i
 	}
 	close(jobs) // exit condition for workers
@@ -105,14 +110,26 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	logrus.Infof("namespace %s has %v secrets", namespace, len(secrets))
 }
 
+const charset = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789"
+
+var seed *rand.Rand = rand.New(
+	rand.NewSource(time.Now().UnixNano()))
+
+func randString(length int) string {
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[seed.Intn(len(charset))]
+	}
+	return string(b)
+}
+
 // genRandomSecret creates a secret with random data
 func genRandomSecret(i int) corev1.Secret {
-	randData := sha256.Sum256([]byte(fmt.Sprintf("%v", time.Now().UnixNano())))
 	return corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("secret-%v", i),
 		},
-		Data: map[string][]byte{"password": randData[:]},
+		Data: map[string][]byte{"password": []byte(randString(secretSize))},
 	}
 }
 
