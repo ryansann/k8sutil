@@ -112,11 +112,13 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 
 const charset = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789"
 
-var seed *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()))
+var seed *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
+var mtx sync.Mutex
 
 func randString(length int) string {
 	b := make([]byte, length)
+	mtx.Lock()
+	defer mtx.Unlock()
 	for i := range b {
 		b[i] = charset[seed.Intn(len(charset))]
 	}
