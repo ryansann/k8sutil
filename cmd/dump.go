@@ -23,6 +23,7 @@ var (
 )
 
 func init() {
+	cobra.OnInitialize(initConfig)
 	dumpCmd.PersistentFlags().StringVar(&dumpConfigFile, "config", "./dump.yaml", "Path to dump config file")
 }
 
@@ -48,8 +49,6 @@ func runDump(cmd *cobra.Command, args []string) {
 	}
 
 	logrus.Debug("running dump command")
-
-	cobra.OnInitialize(initConfig)
 
 	dumps, err := k8s.GetDumps(kubeConfig, cfg)
 	if err != nil {

@@ -29,7 +29,6 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	logrus.Debugf("running root command")
-
 	logrus.Debugf("using kubeconfig: %s", kubeConfig)
 }
 

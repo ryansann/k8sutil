@@ -43,6 +43,12 @@ func GetDynamicClient(kubeConfig string, gvr schema.GroupVersionResource) (dynam
 		return nil, err
 	}
 
+	// hack for: x509: certificate signed by unknown authority
+	config.TLSClientConfig.Insecure = true
+	config.TLSClientConfig.CAData = nil
+
+	config.Timeout = clientTimeout
+
 	cli, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return nil, err
