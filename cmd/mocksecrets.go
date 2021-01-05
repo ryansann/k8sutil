@@ -23,16 +23,16 @@ var mockSecretsCmd = &cobra.Command{
 }
 
 var (
-	numSecrets int
-	numWorkers int
-	secretSize int
-	seqStart   int
-	namespace  string
+	numSecrets       int
+	numSecretWorkers int
+	secretSize       int
+	seqStart         int
+	namespace        string
 )
 
 func init() {
 	mockSecretsCmd.PersistentFlags().IntVarP(&numSecrets, "num-secrets", "n", 100, "Number of secrets to create")
-	mockSecretsCmd.PersistentFlags().IntVarP(&numWorkers, "num-workers", "w", 10, "Number of workers to create secrets")
+	mockSecretsCmd.PersistentFlags().IntVarP(&numSecretWorkers, "num-workers", "w", 10, "Number of workers to create secrets")
 	mockSecretsCmd.PersistentFlags().IntVarP(&secretSize, "secret-size", "s", 10, "How large the generated secret data is")
 	mockSecretsCmd.PersistentFlags().IntVar(&seqStart, "seq-start", 1, "Where to start the sequence for secret naming, e.g. secret-<seq-start>")
 	mockSecretsCmd.PersistentFlags().StringVar(&namespace, "ns", "default", "Namespace to create secrets in")
@@ -72,12 +72,12 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	}()
 
 	// buffered channel for work
-	jobs := make(chan int, numWorkers)
+	jobs := make(chan int, numSecretWorkers)
 
 	// spawn workers
 	var wg sync.WaitGroup
-	wg.Add(numWorkers)
-	for j := 1; j <= numWorkers; j++ {
+	wg.Add(numSecretWorkers)
+	for j := 1; j <= numSecretWorkers; j++ {
 		go func(w int) {
 			logrus.Debugf("starting worker %v", w)
 			workerCli, _ := k8s.GetClient(kubeConfig)
@@ -102,12 +102,12 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 
 	wg.Wait() // wait for workers to exit
 
-	secrets, err := batchGetSecrets(cli, namespace)
+	secrets, err := batchGetSecrets(cli, "")
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	logrus.Infof("namespace %s has %v secrets", namespace, len(secrets))
+	logrus.Infof("cluster has %v secrets", len(secrets))
 }
 
 const charset = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789"

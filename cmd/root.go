@@ -17,7 +17,7 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(dumpCmd, mockSecretsCmd)
+	rootCmd.AddCommand(dumpCmd, mockSecretsCmd, pushImagesCmd)
 	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "./kube.config", "Kubeconfig file for cluster")
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
 }

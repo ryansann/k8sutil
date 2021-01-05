@@ -12,9 +12,10 @@ import (
 )
 
 var dumpCmd = &cobra.Command{
-	Use:   "dump",
-	Short: "dump dumps a list of resources from the kubernetes cluster and filters them",
-	Run:   runDump,
+	Use:    "dump",
+	Short:  "dump dumps a list of resources from the kubernetes cluster and filters them",
+	PreRun: initDump,
+	Run:    runDump,
 }
 
 var (
@@ -23,8 +24,11 @@ var (
 )
 
 func init() {
-	cobra.OnInitialize(initConfig)
 	dumpCmd.PersistentFlags().StringVar(&dumpConfigFile, "config", "./dump.yaml", "Path to dump config file")
+}
+
+func initDump(cmd *cobra.Command, args []string) {
+	cobra.OnInitialize(initConfig)
 }
 
 func initConfig() {
@@ -44,6 +48,8 @@ func initConfig() {
 }
 
 func runDump(cmd *cobra.Command, args []string) {
+	cobra.OnInitialize(initConfig)
+
 	if debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
