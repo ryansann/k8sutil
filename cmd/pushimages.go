@@ -67,7 +67,7 @@ func runPushImages(cmd *cobra.Command, args []string) {
 	}
 
 	images := strings.Split(string(fbytes), "\n")
-	logrus.Debugf("images: %v", images)
+	logrus.Debugf("preparing to push %v images", len(images))
 
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -88,7 +88,7 @@ func runPushImages(cmd *cobra.Command, args []string) {
 
 	var auth string
 	if registryUser != "" && registryPass != "" {
-		logrus.Debug("private registry detected, logging in")
+		logrus.Debug("private registry detected, creating auth")
 
 		var authConfig = types.AuthConfig{
 			Username:      registryUser,
