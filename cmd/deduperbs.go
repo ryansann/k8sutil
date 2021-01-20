@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
+	"github.com/ryansann/k8sutil/k8s"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"strings"
@@ -16,20 +19,22 @@ import (
 var deduperbsCmd = &cobra.Command{
 	Use:   "deduperbs",
 	Short: "deduperbs removes duplicate RoleBindings and ClusterRoleBinding resources from a kubernetes cluster",
-	Long: "deduperbs deletes dupes from an input file () otherwise it retrieves the list from the kubernetes api server. " +
-		"Once it has founds duplicates, it attempts to remove them. Use --dry-run to skip the removal process.",
+	Long: "deduperbs deletes dupes from input files (--input-file-rbs and/or --input-file-crbs) otherwise it retrieves the list from the kubernetes api server. " +
+		"Once it has found duplicates, it attempts to remove them. Use --dry-run to skip the removal process.",
 	Run: runDeduperbs,
 }
 
 var (
-	dryRun    bool
-	inputFile string
-	schm      *runtime.Scheme
+	dryRun        bool
+	inputFileRbs  string
+	inputFileCrbs string
+	schm          *runtime.Scheme
 )
 
 func init() {
 	// flags
-	deduperbsCmd.PersistentFlags().StringVarP(&inputFile, "input-file", "f", "", "Name of the file containing list of rbs and crbs returned as json from the kubernetes api as a List.")
+	deduperbsCmd.PersistentFlags().StringVar(&inputFileRbs, "input-file-rbs", "", "Name of the file containing list of rolebindings as returned from the kubernetes api as a JSON v1.List")
+	deduperbsCmd.PersistentFlags().StringVar(&inputFileCrbs, "input-file-crbs", "", "Name of the file containing list of clusterrolebindings as returned from the kubernetes api as a JSON v1.List")
 	deduperbsCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "If set, dupes will not be removed from the kubernetes.")
 
 	// init scheme for decoder
@@ -45,27 +50,110 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 
 	logrus.Debug("running deduperbs command")
 
-	data, err := readFile(inputFile)
-	if err != nil {
-		logrus.Fatal("couldn't read file")
+	decode := scheme.Codecs.UniversalDeserializer().Decode
+
+	var rbs, crbs corev1.List
+	if inputFileRbs != "" {
+		rbsData, err := readFile(inputFileRbs)
+		if err != nil {
+			logrus.Fatalf("could not read file: %v", inputFileRbs)
+		}
+
+		_, _, err = decode(rbsData, nil, &rbs)
+		if err != nil {
+			logrus.Fatal(err)
+		}
 	}
 
-	var l corev1.List
-	decode := scheme.Codecs.UniversalDeserializer().Decode
-	_, _, err = decode(data, nil, &l)
+	if inputFileCrbs != "" {
+		crbsData, err := readFile(inputFileCrbs)
+		if err != nil {
+			logrus.Fatalf("could not read file: %v", inputFileCrbs)
+		}
+
+		_, _, err = decode(crbsData, nil, &crbs)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+	}
+
+	// retrieve from kubernetes if no input files are given
+	if inputFileRbs == "" && inputFileCrbs == "" {
+		cli, err := k8s.GetClient(kubeConfig)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		rbsList, err := cli.RbacV1().RoleBindings("").List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			logrus.Fatalf("could not retrieve RoleBindings from kubernetes, %v", err)
+		}
+
+		rbsData, err := rbsList.Marshal()
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		_, _, err = decode(rbsData, nil, &rbs)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		crbsList, err := cli.RbacV1().ClusterRoleBindings().List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			logrus.Fatalf("could not retrieve ClusterRoleBindings from kubernetes, %v", err)
+		}
+
+		crbsData, err := crbsList.Marshal()
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		_, _, err = decode(crbsData, nil, &crbs)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+	}
+
+	rbDupes, err := findDupes(rbs)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	// indexRbSubjRole stores a list of rolebinding uids for each subject/role combination
-	indexRbSubjRole := make(map[string][]string)
-	// filteredIndexRbSubjRole stores a list of rolebinding uids for each subject/role combination, and additionally only contains dupes
-	var filteredIndexRbSubjRole map[string][]string
+	if len(rbDupes) > 0 {
+		ind, err := json.MarshalIndent(rbDupes, "", "  ")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		fmt.Printf("%v\n", string(ind))
+	} else {
+		logrus.Debug("no dupe rbs found")
+	}
 
-	// indexCrbSubjRole stores a list of clusterrolebinding uids for each subject/role combination
-	indexCrbSubjRole := make(map[string][]string)
-	// filteredIndexCrbSubjRole stores a list of clusterrolebinding uids for each subject/role combination, and additionally only contains dupes
-	var filteredIndexCrbSubjRole map[string][]string
+	crbDupes, err := findDupes(crbs)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	if len(crbDupes) > 0 {
+		ind, err := json.MarshalIndent(crbDupes, "", "  ")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+		fmt.Printf("%v\n", string(ind))
+	} else {
+		logrus.Debug("no dupe crbs found")
+	}
+}
+
+var (
+	filters = []string{"-projectmember", "-projectowner", "-clustermember", "-clusterowner"}
+)
+
+func findDupes(l corev1.List) (map[string][]string, error) {
+	// index stores a list of RoleBinding/ClusterRoleBinding uids for each subject/role combination
+	index := make(map[string][]string)
+	decode := scheme.Codecs.UniversalDeserializer().Decode
 
 	logrus.Debugf("list has: %v items", len(l.Items))
 	for _, i := range l.Items {
@@ -73,6 +161,9 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		if err != nil {
 			logrus.Fatal(err)
 		}
+
+		var uid string
+		var filteredKeys []string
 
 		switch o.(type) {
 		case *rbacv1.RoleBinding:
@@ -84,17 +175,8 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 				logrus.Warn("rb: %v has multiple subjects", string(rb.UID))
 			}
 
-			filteredKeys := filterSubjRoleKeys(subjRoleKeys, []string{"-projectmember", "-projectowner"})
-			for _, key := range filteredKeys {
-				if existing, ok := indexRbSubjRole[key]; ok {
-					existing = append(existing, string(rb.UID))
-					indexRbSubjRole[key] = existing
-				} else {
-					indexRbSubjRole[key] = []string{string(rb.UID)}
-				}
-			}
-
-			filteredIndexRbSubjRole = filterSubjRoleIndex(indexRbSubjRole)
+			filteredKeys = filterSubjRoleKeys(subjRoleKeys, filters)
+			uid = string(rb.UID)
 		case *rbacv1.ClusterRoleBinding:
 			crb := o.(*rbacv1.ClusterRoleBinding)
 			logrus.Debugf("crb.Name: %v", crb.Name)
@@ -104,39 +186,23 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 				logrus.Warn("crb: %v has multiple subjects", string(crb.UID))
 			}
 
-			filteredKeys := filterSubjRoleKeys(subjRoleKeys, []string{"-clustermember", "-clusterowner"})
-			for _, key := range filteredKeys {
-				if existing, ok := indexCrbSubjRole[key]; ok {
-					existing = append(existing, string(crb.UID))
-					indexCrbSubjRole[key] = existing
-				} else {
-					indexCrbSubjRole[key] = []string{string(crb.UID)}
-				}
+			filteredKeys = filterSubjRoleKeys(subjRoleKeys, filters)
+			uid = string(crb.UID)
+		default:
+			return nil, fmt.Errorf("unexpected type in list")
+		}
+
+		for _, key := range filteredKeys {
+			if existing, ok := index[key]; ok {
+				existing = append(existing, uid)
+				index[key] = existing
+			} else {
+				index[key] = []string{uid}
 			}
-
-			filteredIndexCrbSubjRole = filterSubjRoleIndex(indexRbSubjRole)
 		}
 	}
 
-	if len(filteredIndexRbSubjRole) > 0 {
-		ind, err := json.MarshalIndent(filteredIndexRbSubjRole, "", "  ")
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		fmt.Printf("%v\n", string(ind))
-	} else {
-		logrus.Debug("no dupe rbs found")
-	}
-
-	if len(filteredIndexCrbSubjRole) > 0 {
-		ind, err := json.MarshalIndent(filteredIndexCrbSubjRole, "", "  ")
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		fmt.Printf("%v\n", string(ind))
-	} else {
-		logrus.Debug("no dupe crbs found")
-	}
+	return findSubjRoleDupes(index), nil
 }
 
 func getRbSubjRoleKeys(rb *rbacv1.RoleBinding) []string {
@@ -165,7 +231,7 @@ func filterSubjRoleKeys(keys []string, contains []string) []string {
 	return filtered
 }
 
-func filterSubjRoleIndex(ind map[string][]string) map[string][]string {
+func findSubjRoleDupes(ind map[string][]string) map[string][]string {
 	filtered := make(map[string][]string)
 	for k, v := range ind {
 		if len(v) > 1 {
