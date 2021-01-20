@@ -151,7 +151,7 @@ func NewClientWithOpts(ops ...Opt) (*Client, error) {
 			c.scheme = "https"
 		}
 	}
-	
+
 	return c, nil
 }
 

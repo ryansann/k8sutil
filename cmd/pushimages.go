@@ -48,22 +48,9 @@ func runPushImages(cmd *cobra.Command, args []string) {
 
 	logrus.Debug("running pushimages command")
 
-	var err error
-	imageFile, err = filepath.Abs(imageFile)
+	fbytes, err := readFile(imageFile)
 	if err != nil {
 		logrus.Fatal(err)
-	}
-
-	logrus.Debugf("pushing images in file: %v", imageFile)
-
-	f, err := os.Open(imageFile)
-	if err != nil {
-		logrus.Fatalf("could not open image file: %v", err)
-	}
-
-	fbytes, err := ioutil.ReadAll(f)
-	if err != nil {
-		logrus.Fatalf("could not read contents of: %v, %v", imageFile, err)
 	}
 
 	images := strings.Split(string(fbytes), "\n")
@@ -149,4 +136,24 @@ func runPushImages(cmd *cobra.Command, args []string) {
 	}
 
 	wg.Wait()
+}
+
+func readFile(file string) ([]byte, error) {
+	ff, err := filepath.Abs(file)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(ff)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	fbytes, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	return fbytes, nil
 }
