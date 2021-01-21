@@ -63,6 +63,5 @@ func getConfig(kubeConfig string) (*rest.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return clientcmd.BuildConfigFromFlags("", kubeConfig)
 }

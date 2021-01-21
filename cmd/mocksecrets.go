@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -51,9 +50,9 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 	}
 
 	// check if namespace exists, create it if it doesn't
-	_, err = cli.CoreV1().Namespaces().Get(context.Background(), namespace, metav1.GetOptions{})
+	_, err = cli.CoreV1().Namespaces().Get(namespace, metav1.GetOptions{})
 	if errors.IsNotFound(err) { // create if not found
-		ns, err := cli.CoreV1().Namespaces().Create(context.Background(), &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}, metav1.CreateOptions{})
+		ns, err := cli.CoreV1().Namespaces().Create(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}})
 		if err != nil {
 			logrus.Fatal(err)
 		}
@@ -86,7 +85,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 				secretNum := seqStart + i
 				logrus.Debugf("worker %v creating secret %v", w, secretNum)
 				s := genRandomSecret(secretNum)
-				_, err := workerCli.CoreV1().Secrets(namespace).Create(context.Background(), &s, metav1.CreateOptions{})
+				_, err := workerCli.CoreV1().Secrets(namespace).Create(&s)
 				if err != nil {
 					e <- err
 				}
@@ -143,7 +142,7 @@ func batchGetSecrets(cli *kubernetes.Clientset, ns string) ([]corev1.Secret, err
 	var secrets []corev1.Secret
 	var continueToken string
 	for {
-		secretsList, err := cli.CoreV1().Secrets(ns).List(context.Background(), metav1.ListOptions{
+		secretsList, err := cli.CoreV1().Secrets(ns).List(metav1.ListOptions{
 			Limit:    secretBatchSize,
 			Continue: continueToken,
 		})

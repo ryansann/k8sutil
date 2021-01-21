@@ -1,7 +1,6 @@
 package k8s
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 
@@ -22,7 +21,7 @@ func GetDumps(kubeConfig string, cfg config.DumpCommand) (map[string]interface{}
 			return nil, err
 		}
 
-		l, err := cli.Namespace(dump.Namespace).List(context.Background(), metav1.ListOptions{})
+		l, err := cli.Namespace(dump.Namespace).List(metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}

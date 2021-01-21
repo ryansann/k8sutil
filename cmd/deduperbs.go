@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 
@@ -79,12 +78,13 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 
 	// retrieve from kubernetes if no input files are given
 	if inputFileRbs == "" && inputFileCrbs == "" {
+		logrus.Debugf("using kubeconfig: %v", kubeConfig)
 		cli, err := k8s.GetClient(kubeConfig)
 		if err != nil {
 			logrus.Fatal(err)
 		}
 
-		rbsList, err := cli.RbacV1().RoleBindings("").List(context.Background(), metav1.ListOptions{})
+		rbsList, err := cli.RbacV1().RoleBindings("").List(metav1.ListOptions{})
 		if err != nil {
 			logrus.Fatalf("could not retrieve RoleBindings from kubernetes, %v", err)
 		}
@@ -99,7 +99,7 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 			logrus.Fatal(err)
 		}
 
-		crbsList, err := cli.RbacV1().ClusterRoleBindings().List(context.Background(), metav1.ListOptions{})
+		crbsList, err := cli.RbacV1().ClusterRoleBindings().List(metav1.ListOptions{})
 		if err != nil {
 			logrus.Fatalf("could not retrieve ClusterRoleBindings from kubernetes, %v", err)
 		}
@@ -173,7 +173,7 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 
 			subjRoleKeys := getRbSubjRoleNsKeys(rb)
 			if len(subjRoleKeys) > 1 {
-				logrus.Warn("rb: %v has multiple subjects", string(rb.UID))
+				logrus.Debugf("rb: %v has multiple subjects", string(rb.UID))
 			}
 
 			filteredKeys = filterSubjRoleKeys(subjRoleKeys, filters)
@@ -184,7 +184,7 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 
 			subjRoleKeys := getCrbSubjRoleKeys(crb)
 			if len(subjRoleKeys) > 1 {
-				logrus.Warn("crb: %v has multiple subjects", string(crb.UID))
+				logrus.Debugf("crb: %v has multiple subjects", string(crb.UID))
 			}
 
 			filteredKeys = filterSubjRoleKeys(subjRoleKeys, filters)
