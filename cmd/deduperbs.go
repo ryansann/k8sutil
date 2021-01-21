@@ -120,12 +120,10 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		logrus.Fatal(err)
 	}
 
+	out := make(map[string]interface{})
+
 	if len(rbDupes) > 0 {
-		ind, err := json.MarshalIndent(rbDupes, "", "  ")
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		fmt.Printf("%v\n", string(ind))
+		out["rolebindings"] = rbDupes
 	} else {
 		logrus.Debug("no dupe rbs found")
 	}
@@ -136,14 +134,17 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	}
 
 	if len(crbDupes) > 0 {
-		ind, err := json.MarshalIndent(crbDupes, "", "  ")
-		if err != nil {
-			logrus.Fatal(err)
-		}
-		fmt.Printf("%v\n", string(ind))
+		out["clusterrolebindings"] = crbDupes
 	} else {
 		logrus.Debug("no dupe crbs found")
 	}
+
+	outBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	fmt.Printf("%v", string(outBytes))
 }
 
 var (
@@ -170,7 +171,7 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 			rb := o.(*rbacv1.RoleBinding)
 			logrus.Debugf("rb.Name: %v", rb.Name)
 
-			subjRoleKeys := getRbSubjRoleKeys(rb)
+			subjRoleKeys := getRbSubjRoleNsKeys(rb)
 			if len(subjRoleKeys) > 1 {
 				logrus.Warn("rb: %v has multiple subjects", string(rb.UID))
 			}
@@ -205,11 +206,11 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 	return findSubjRoleDupes(index), nil
 }
 
-func getRbSubjRoleKeys(rb *rbacv1.RoleBinding) []string {
+func getRbSubjRoleNsKeys(rb *rbacv1.RoleBinding) []string {
 	var keys []string
 	role := rb.RoleRef.Name
 	for _, subj := range rb.Subjects {
-		keys = append(keys, strings.Join([]string{subj.Name, role}, "/"))
+		keys = append(keys, strings.Join([]string{subj.Name, role, rb.Namespace}, "/"))
 	}
 	return keys
 }
