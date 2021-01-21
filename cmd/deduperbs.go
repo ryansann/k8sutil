@@ -11,7 +11,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"strings"
 )
@@ -50,6 +49,41 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 
 	logrus.Debug("running deduperbs command")
 
+	var rbInd, crbInd map[string][]string
+	if inputFileRbs == "" && inputFileCrbs == "" {
+		rbInd, crbInd = findDupesFromK8s()
+	} else {
+		rbInd, crbInd = findDupesFromFiles()
+	}
+
+	var foundDupeRbs, foundDupeCrbs bool
+	out := make(map[string]interface{})
+
+	if len(rbInd) > 0 {
+		foundDupeRbs = true
+		out["rolebindings"] = rbInd
+	} else {
+		logrus.Debug("no dupe rbs found")
+	}
+
+	if len(crbInd) > 0 {
+		foundDupeCrbs = true
+		out["clusterrolebindings"] = crbInd
+	} else {
+		logrus.Debug("no dupe crbs found")
+	}
+
+	outBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		logrus.Fatal(err)
+	}
+
+	if foundDupeRbs || foundDupeCrbs {
+		fmt.Printf("%v", string(outBytes))
+	}
+}
+
+func findDupesFromFiles() (map[string][]string, map[string][]string) {
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 	var rbs, crbs corev1.List
 
@@ -77,63 +111,9 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// retrieve from kubernetes if no input files are given
-	if inputFileRbs == "" && inputFileCrbs == "" {
-		logrus.Debugf("using kubeconfig: %v", kubeConfig)
-		rbCli, err := k8s.GetDynamicClient(kubeConfig, schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"})
-		if err != nil {
-			logrus.Fatalf("error creating dynamic client: %v", err)
-		}
-
-		rbsList, err := rbCli.Namespace("").List(metav1.ListOptions{})
-		if err != nil {
-			logrus.Fatalf("could not retrieve RoleBindings from kubernetes, %v", err)
-		}
-
-		rbsData, err := json.Marshal(rbsList)
-		if err != nil {
-			logrus.Fatalf("marshal error: %v", err)
-		}
-
-		_, _, err = decode(rbsData, nil, &rbs)
-		if err != nil {
-			logrus.Fatalf("decode error: %v", err)
-		}
-
-		crbCli, err := k8s.GetDynamicClient(kubeConfig, schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"})
-		if err != nil {
-			logrus.Fatalf("error creating dynamic client: %v", err)
-		}
-
-		crbsList, err := crbCli.Namespace("").List(metav1.ListOptions{})
-		if err != nil {
-			logrus.Fatalf("could not retrieve ClusterRoleBindings from kubernetes, %v", err)
-		}
-
-		crbsData, err := json.Marshal(crbsList)
-		if err != nil {
-			logrus.Fatalf("marshal error: %v", err)
-		}
-
-		_, _, err = decode(crbsData, nil, &crbs)
-		if err != nil {
-			logrus.Fatalf("decode error: %v", err)
-		}
-	}
-
 	rbDupes, err := findDupes(rbs)
 	if err != nil {
 		logrus.Fatalf("could not find rb dupes: %v", err)
-	}
-
-	var foundDupeRbs, foundDupeCrbs bool
-	out := make(map[string]interface{})
-
-	if len(rbDupes) > 0 {
-		foundDupeRbs = true
-		out["rolebindings"] = rbDupes
-	} else {
-		logrus.Debug("no dupe rbs found")
 	}
 
 	crbDupes, err := findDupes(crbs)
@@ -141,21 +121,73 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		logrus.Fatalf("could not find crb dupes: %v", err)
 	}
 
-	if len(crbDupes) > 0 {
-		foundDupeCrbs = true
-		out["clusterrolebindings"] = crbDupes
-	} else {
-		logrus.Debug("no dupe crbs found")
-	}
+	return rbDupes, crbDupes
+}
 
-	outBytes, err := json.MarshalIndent(out, "", "  ")
+func findDupesFromK8s() (map[string][]string, map[string][]string) {
+	logrus.Debugf("using kubeconfig: %v", kubeConfig)
+	cli, err := k8s.GetClient(kubeConfig)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("error creating k8s client: %v", err)
 	}
 
-	if foundDupeRbs || foundDupeCrbs {
-		fmt.Printf("%v", string(outBytes))
+	rbsList, err := cli.RbacV1().RoleBindings("").List(metav1.ListOptions{})
+	if err != nil {
+		logrus.Fatalf("could not retrieve RoleBindings from kubernetes, %v", err)
 	}
+
+	// index stores a list of RoleBinding/ClusterRoleBinding uids for each subject/role combination
+	rbIndex := make(map[string][]string)
+	for _, rb := range rbsList.Items {
+		var filteredKeys []string
+		uid := string(rb.UID)
+
+		subjRoleKeys := getRbSubjRoleNsKeys(&rb)
+		if len(subjRoleKeys) > 1 {
+			logrus.Debugf("rb: %v has multiple subjects", uid)
+		}
+
+		filteredKeys = filterKeys(subjRoleKeys, filters)
+
+		for _, key := range filteredKeys {
+			if existing, ok := rbIndex[key]; ok {
+				existing = append(existing, uid)
+				rbIndex[key] = existing
+			} else {
+				rbIndex[key] = []string{uid}
+			}
+		}
+	}
+
+	crbsList, err := cli.RbacV1().ClusterRoleBindings().List(metav1.ListOptions{})
+	if err != nil {
+		logrus.Fatalf("could not retrieve ClusterRoleBindings from kubernetes, %v", err)
+	}
+
+	// index stores a list of RoleBinding/ClusterRoleBinding uids for each subject/role combination
+	crbIndex := make(map[string][]string)
+	for _, crb := range crbsList.Items {
+		var filteredKeys []string
+		uid := string(crb.UID)
+
+		subjRoleKeys := getCrbSubjRoleKeys(&crb)
+		if len(subjRoleKeys) > 1 {
+			logrus.Debugf("rb: %v has multiple subjects", uid)
+		}
+
+		filteredKeys = filterKeys(subjRoleKeys, filters)
+
+		for _, key := range filteredKeys {
+			if existing, ok := crbIndex[key]; ok {
+				existing = append(existing, uid)
+				crbIndex[key] = existing
+			} else {
+				crbIndex[key] = []string{uid}
+			}
+		}
+	}
+
+	return filterDupes(rbIndex), filterDupes(crbIndex)
 }
 
 var (
@@ -188,7 +220,7 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 				logrus.Debugf("rb: %v has multiple subjects", string(rb.UID))
 			}
 
-			filteredKeys = filterSubjRoleKeys(subjRoleKeys, filters)
+			filteredKeys = filterKeys(subjRoleKeys, filters)
 			uid = string(rb.UID)
 		case *rbacv1.ClusterRoleBinding:
 			crb := o.(*rbacv1.ClusterRoleBinding)
@@ -199,7 +231,7 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 				logrus.Debugf("crb: %v has multiple subjects", string(crb.UID))
 			}
 
-			filteredKeys = filterSubjRoleKeys(subjRoleKeys, filters)
+			filteredKeys = filterKeys(subjRoleKeys, filters)
 			uid = string(crb.UID)
 		default:
 			return nil, fmt.Errorf("unexpected type in list")
@@ -215,7 +247,7 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 		}
 	}
 
-	return findSubjRoleDupes(index), nil
+	return filterDupes(index), nil
 }
 
 func getRbSubjRoleNsKeys(rb *rbacv1.RoleBinding) []string {
@@ -227,7 +259,7 @@ func getRbSubjRoleNsKeys(rb *rbacv1.RoleBinding) []string {
 	return keys
 }
 
-func filterSubjRoleKeys(keys []string, contains []string) []string {
+func filterKeys(keys []string, contains []string) []string {
 	var filtered []string
 	for _, k := range keys {
 		hasSubstr := false
@@ -244,7 +276,7 @@ func filterSubjRoleKeys(keys []string, contains []string) []string {
 	return filtered
 }
 
-func findSubjRoleDupes(ind map[string][]string) map[string][]string {
+func filterDupes(ind map[string][]string) map[string][]string {
 	filtered := make(map[string][]string)
 	for k, v := range ind {
 		if len(v) > 1 {
