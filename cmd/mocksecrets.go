@@ -44,6 +44,7 @@ func runMockSecrets(cmd *cobra.Command, args []string) {
 
 	logrus.Debug("running mocksecrets command")
 
+	logrus.Debugf("using kubeconfig: %v", kubeConfig)
 	cli, err := k8s.GetClient(kubeConfig)
 	if err != nil {
 		logrus.Fatal(err)

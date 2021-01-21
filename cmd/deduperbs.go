@@ -11,6 +11,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	"strings"
 )
@@ -50,8 +51,8 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	logrus.Debug("running deduperbs command")
 
 	decode := scheme.Codecs.UniversalDeserializer().Decode
-
 	var rbs, crbs corev1.List
+
 	if inputFileRbs != "" {
 		rbsData, err := readFile(inputFileRbs)
 		if err != nil {
@@ -60,7 +61,7 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 
 		_, _, err = decode(rbsData, nil, &rbs)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("decode error: %v", err)
 		}
 	}
 
@@ -72,57 +73,64 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 
 		_, _, err = decode(crbsData, nil, &crbs)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("decode error: %v", err)
 		}
 	}
 
 	// retrieve from kubernetes if no input files are given
 	if inputFileRbs == "" && inputFileCrbs == "" {
 		logrus.Debugf("using kubeconfig: %v", kubeConfig)
-		cli, err := k8s.GetClient(kubeConfig)
+		rbCli, err := k8s.GetDynamicClient(kubeConfig, schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings"})
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("error creating dynamic client: %v", err)
 		}
 
-		rbsList, err := cli.RbacV1().RoleBindings("").List(metav1.ListOptions{})
+		rbsList, err := rbCli.Namespace("").List(metav1.ListOptions{})
 		if err != nil {
 			logrus.Fatalf("could not retrieve RoleBindings from kubernetes, %v", err)
 		}
 
-		rbsData, err := rbsList.Marshal()
+		rbsData, err := json.Marshal(rbsList)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("marshal error: %v", err)
 		}
 
 		_, _, err = decode(rbsData, nil, &rbs)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("decode error: %v", err)
 		}
 
-		crbsList, err := cli.RbacV1().ClusterRoleBindings().List(metav1.ListOptions{})
+		crbCli, err := k8s.GetDynamicClient(kubeConfig, schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings"})
+		if err != nil {
+			logrus.Fatalf("error creating dynamic client: %v", err)
+		}
+
+		crbsList, err := crbCli.Namespace("").List(metav1.ListOptions{})
 		if err != nil {
 			logrus.Fatalf("could not retrieve ClusterRoleBindings from kubernetes, %v", err)
 		}
 
-		crbsData, err := crbsList.Marshal()
+		crbsData, err := json.Marshal(crbsList)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("marshal error: %v", err)
 		}
 
 		_, _, err = decode(crbsData, nil, &crbs)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("decode error: %v", err)
 		}
 	}
 
 	rbDupes, err := findDupes(rbs)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("could not find rb dupes: %v", err)
 	}
 
+	var foundDupeRbs, foundDupeCrbs bool
 	out := make(map[string]interface{})
 
 	if len(rbDupes) > 0 {
+		foundDupeRbs = true
 		out["rolebindings"] = rbDupes
 	} else {
 		logrus.Debug("no dupe rbs found")
@@ -130,10 +138,11 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 
 	crbDupes, err := findDupes(crbs)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Fatalf("could not find crb dupes: %v", err)
 	}
 
 	if len(crbDupes) > 0 {
+		foundDupeCrbs = true
 		out["clusterrolebindings"] = crbDupes
 	} else {
 		logrus.Debug("no dupe crbs found")
@@ -144,7 +153,9 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		logrus.Fatal(err)
 	}
 
-	fmt.Printf("%v", string(outBytes))
+	if foundDupeRbs || foundDupeCrbs {
+		fmt.Printf("%v", string(outBytes))
+	}
 }
 
 var (
@@ -160,7 +171,8 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 	for _, i := range l.Items {
 		o, _, err := decode(i.Raw, nil, nil)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Error(err)
+			continue
 		}
 
 		var uid string
