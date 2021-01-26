@@ -23,7 +23,7 @@ func init() {
 		pushImagesCmd,
 		deduperbsCmd,
 	)
-	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "./kube.config", "Kubeconfig file for cluster")
+	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "~/.kube/config", "Kubeconfig file for cluster")
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
 }
 
