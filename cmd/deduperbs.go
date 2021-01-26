@@ -35,7 +35,7 @@ func init() {
 	// flags
 	deduperbsCmd.PersistentFlags().StringVar(&inputFileRbs, "input-file-rbs", "", "Name of the file containing list of rolebindings as returned from the kubernetes api as a JSON v1.List")
 	deduperbsCmd.PersistentFlags().StringVar(&inputFileCrbs, "input-file-crbs", "", "Name of the file containing list of clusterrolebindings as returned from the kubernetes api as a JSON v1.List")
-	deduperbsCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "If set, dupes will not be removed from the kubernetes.")
+	deduperbsCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "If set, dupes will not be removed from the kubernetes api.")
 
 	// init scheme for decoder
 	schm = runtime.NewScheme()
@@ -192,7 +192,7 @@ func findDupesFromK8s(cli *kubernetes.Clientset) (map[string][]string, map[strin
 
 		subjRoleKeys := getCrbSubjRoleKeys(&crb)
 		if len(subjRoleKeys) > 1 {
-			logrus.Debugf("rb: %v has multiple subjects", id)
+			logrus.Debugf("crb: %v has multiple subjects", id)
 		}
 
 		filteredKeys = filterKeys(subjRoleKeys, filters)
@@ -339,7 +339,7 @@ func removeDupeCrbs(cli *kubernetes.Clientset, ind map[string][]string) error {
 		logrus.Debugf("processing dupes for %v", k)
 		if len(v) > 1 { // there are dupes
 			for _, id := range v[1:] { // skip first element
-				cmps := strings.Split(id, "/")
+				cmps := strings.Split(id, "/") // id = "/<name>"
 				name := cmps[1]
 
 				logrus.Debugf("removing crb: %s", name)
