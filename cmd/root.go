@@ -3,6 +3,8 @@ package cmd
 import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"os"
+	"os/user"
 )
 
 var rootCmd = &cobra.Command{
@@ -23,8 +25,16 @@ func init() {
 		pushImagesCmd,
 		deduperbsCmd,
 	)
-	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "~/.kube/config", "Kubeconfig file for cluster")
+	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "c", "", "Kubeconfig file for cluster")
 	rootCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "Enable debug logging")
+
+	if kubeConfig == "" {
+		kubeConfig = os.Getenv("KUBECONFIG")
+	}
+	if kubeConfig == "" {
+		usr, _ := user.Current()
+		kubeConfig = usr.HomeDir + "/.kube/config"
+	}
 }
 
 // run executes the steps required to dump resources

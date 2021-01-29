@@ -49,22 +49,17 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	}
 
 	logrus.Debug("running deduperbs command")
-
-	var cli *kubernetes.Clientset
-	var err error
-	if kubeConfig != "" {
-		logrus.Debugf("using kubeconfig: %v", kubeConfig)
-		cli, err = k8s.GetClient(kubeConfig)
-		if err != nil {
-			logrus.Fatalf("error creating k8s client: %v", err)
-		}
-	} else {
-		dryRun = true
-		logrus.Debugf("no kubeconfig provided, dupes will not be removed from api")
-	}
+	logrus.Debugf("kubeConfig: %v", kubeConfig)
 
 	var rbInd, crbInd map[string][]string
 	if inputFileRbs == "" && inputFileCrbs == "" {
+		logrus.Debugf("using kubeconfig: %v", kubeConfig)
+
+		cli, err := k8s.GetClient(kubeConfig)
+		if err != nil {
+			logrus.Fatalf("error creating k8s client: %v", err)
+		}
+
 		rbInd, crbInd = findDupesFromK8s(cli)
 	} else {
 		rbInd, crbInd = findDupesFromFiles()
@@ -97,6 +92,11 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	}
 
 	if !dryRun {
+		cli, err := k8s.GetClient(kubeConfig)
+		if err != nil {
+			logrus.Fatalf("error creating k8s client: %v", err)
+		}
+
 		err = removeDupeRbs(cli, rbInd)
 		if err != nil {
 			logrus.Fatal("could not remove dupe rbs: %v", err)
