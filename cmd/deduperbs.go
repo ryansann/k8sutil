@@ -3,7 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"k8s.io/client-go/kubernetes"
+	"strings"
 
 	"github.com/ryansann/k8sutil/k8s"
 	"github.com/sirupsen/logrus"
@@ -12,8 +12,8 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-	"strings"
 )
 
 var deduperbsCmd = &cobra.Command{
@@ -68,15 +68,27 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	var foundDupeRbs, foundDupeCrbs bool
 	out := make(map[string]interface{})
 
-	if len(rbInd) > 0 {
+	if rbDupes := len(rbInd); rbDupes > 0 {
 		foundDupeRbs = true
+		var totalDupes int
+		for _, v := range rbInd {
+			totalDupes += len(v)
+		}
+		logrus.Debugf("groups of duplicate role bindings: %v", rbDupes)
+		logrus.Debugf("total duplicate role bindings: %v", totalDupes)
 		out["rolebindings"] = rbInd
 	} else {
 		logrus.Debug("no dupe rbs found")
 	}
 
-	if len(crbInd) > 0 {
+	if crbDupes := len(crbInd); crbDupes > 0 {
 		foundDupeCrbs = true
+		var totalDupes int
+		for _, v := range crbInd {
+			totalDupes += len(v)
+		}
+		logrus.Debugf("groups of duplicate cluster role bindings: %v", crbDupes)
+		logrus.Debugf("total duplicate cluster role bindings: %v", totalDupes)
 		out["clusterrolebindings"] = crbInd
 	} else {
 		logrus.Debug("no dupe crbs found")
