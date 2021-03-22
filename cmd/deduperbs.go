@@ -26,6 +26,8 @@ var deduperbsCmd = &cobra.Command{
 
 var (
 	dryRun        bool
+	output        string
+	outputT       outputType
 	inputFileRbs  string
 	inputFileCrbs string
 	schm          *runtime.Scheme
@@ -36,11 +38,35 @@ func init() {
 	deduperbsCmd.PersistentFlags().StringVar(&inputFileRbs, "input-file-rbs", "", "Name of the file containing list of rolebindings as returned from the kubernetes api as a JSON v1.List")
 	deduperbsCmd.PersistentFlags().StringVar(&inputFileCrbs, "input-file-crbs", "", "Name of the file containing list of clusterrolebindings as returned from the kubernetes api as a JSON v1.List")
 	deduperbsCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "If set, dupes will not be removed from the kubernetes api.")
+	deduperbsCmd.PersistentFlags().StringVarP(&output, "output", "o", "", "If set, only the information about total dupes will be output")
 
 	// init scheme for decoder
 	schm = runtime.NewScheme()
 	_ = rbacv1.AddToScheme(schm)
 	_ = corev1.AddToScheme(schm)
+}
+
+type outputType int
+
+const (
+	dupes  outputType = iota // output dupes indicies and totals
+	totals                   // output only totals
+	all                      // output all indicies and totals
+)
+
+const defaultOutputType = dupes
+
+var outputTypes = map[string]outputType{
+	"dupes":  dupes,
+	"totals": totals,
+	"all":    all,
+}
+
+func parseOutputType(s string) outputType {
+	if v, ok := outputTypes[strings.ToLower(s)]; ok {
+		return v
+	}
+	return defaultOutputType
 }
 
 func runDeduperbs(cmd *cobra.Command, args []string) {
@@ -51,6 +77,8 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	logrus.Debug("running deduperbs command")
 	logrus.Debugf("kubeConfig: %v", kubeConfig)
 
+	outputT = parseOutputType(output)
+
 	var rbInd, crbInd map[string][]string
 	if inputFileRbs == "" && inputFileCrbs == "" {
 		logrus.Debugf("using kubeconfig: %v", kubeConfig)
@@ -60,9 +88,9 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 			logrus.Fatalf("error creating k8s client: %v", err)
 		}
 
-		rbInd, crbInd = findDupesFromK8s(cli)
+		rbInd, crbInd = findDupesFromK8s(cli, outputT)
 	} else {
-		rbInd, crbInd = findDupesFromFiles()
+		rbInd, crbInd = findDupesFromFiles(outputT)
 	}
 
 	var foundDupeRbs, foundDupeCrbs bool
@@ -99,7 +127,7 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		logrus.Fatal(err)
 	}
 
-	if foundDupeRbs || foundDupeCrbs {
+	if (foundDupeRbs || foundDupeCrbs) && outputT != totals {
 		fmt.Printf("%v", string(outBytes))
 	}
 
@@ -121,7 +149,7 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 	}
 }
 
-func findDupesFromFiles() (map[string][]string, map[string][]string) {
+func findDupesFromFiles(out outputType) (map[string][]string, map[string][]string) {
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 	var rbs, crbs corev1.List
 
@@ -149,12 +177,12 @@ func findDupesFromFiles() (map[string][]string, map[string][]string) {
 		}
 	}
 
-	rbDupes, err := findDupes(rbs)
+	rbDupes, err := findDupes(rbs, out)
 	if err != nil {
 		logrus.Fatalf("could not find rb dupes: %v", err)
 	}
 
-	crbDupes, err := findDupes(crbs)
+	crbDupes, err := findDupes(crbs, out)
 	if err != nil {
 		logrus.Fatalf("could not find crb dupes: %v", err)
 	}
@@ -162,7 +190,7 @@ func findDupesFromFiles() (map[string][]string, map[string][]string) {
 	return rbDupes, crbDupes
 }
 
-func findDupesFromK8s(cli *kubernetes.Clientset) (map[string][]string, map[string][]string) {
+func findDupesFromK8s(cli *kubernetes.Clientset, out outputType) (map[string][]string, map[string][]string) {
 	rbsList, err := cli.RbacV1().RoleBindings("").List(metav1.ListOptions{})
 	if err != nil {
 		logrus.Fatalf("could not retrieve RoleBindings from kubernetes, %v", err)
@@ -189,6 +217,15 @@ func findDupesFromK8s(cli *kubernetes.Clientset) (map[string][]string, map[strin
 				rbIndex[key] = []string{id}
 			}
 		}
+	}
+
+	if out == all {
+		ibytes, err := json.MarshalIndent(rbIndex, "", "  ")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		fmt.Printf("%v\n", string(ibytes))
 	}
 
 	crbsList, err := cli.RbacV1().ClusterRoleBindings().List(metav1.ListOptions{})
@@ -219,6 +256,15 @@ func findDupesFromK8s(cli *kubernetes.Clientset) (map[string][]string, map[strin
 		}
 	}
 
+	if out == all {
+		ibytes, err := json.MarshalIndent(crbIndex, "", "  ")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		fmt.Printf("%v\n", string(ibytes))
+	}
+
 	return filterDupes(rbIndex), filterDupes(crbIndex)
 }
 
@@ -226,7 +272,7 @@ var (
 	filters = []string{"-projectmember", "-projectowner", "-clustermember", "-clusterowner"}
 )
 
-func findDupes(l corev1.List) (map[string][]string, error) {
+func findDupes(l corev1.List, out outputType) (map[string][]string, error) {
 	// index stores a list of RoleBinding/ClusterRoleBinding uids for each subject/role combination
 	index := make(map[string][]string)
 	decode := scheme.Codecs.UniversalDeserializer().Decode
@@ -277,6 +323,15 @@ func findDupes(l corev1.List) (map[string][]string, error) {
 				index[key] = []string{id}
 			}
 		}
+	}
+
+	if out == all {
+		ibytes, err := json.MarshalIndent(index, "", "  ")
+		if err != nil {
+			logrus.Fatal(err)
+		}
+
+		fmt.Printf("%v\n", string(ibytes))
 	}
 
 	return filterDupes(index), nil
