@@ -9,7 +9,6 @@ require (
 	github.com/docker/docker v20.10.2+incompatible
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
-	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/imdario/mergo v0.3.10 // indirect
 	github.com/moby/term v0.0.0-20201216013528-df9cb8a40635 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
@@ -20,7 +19,8 @@ require (
 	github.com/spf13/viper v1.4.0
 	github.com/tidwall/gjson v1.6.0
 	gotest.tools/v3 v3.0.3 // indirect
-	k8s.io/api v0.0.0-20190620084959-7cf5895f2711
-	k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
-	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/api v0.23.4
+	k8s.io/apimachinery v0.23.4
+	k8s.io/client-go v0.23.4
+//k8s.io/client-go v12.0.0+incompatible
 )
