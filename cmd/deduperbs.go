@@ -100,7 +100,7 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		foundDupeRbs = true
 		var totalDupes int
 		for _, v := range rbInd {
-			totalDupes += len(v)
+			totalDupes += len(v) - 1 // one of these is not a dupe
 		}
 		logrus.Debugf("groups of duplicate role bindings: %v", rbDupes)
 		logrus.Debugf("total duplicate role bindings: %v", totalDupes)
@@ -113,7 +113,7 @@ func runDeduperbs(cmd *cobra.Command, args []string) {
 		foundDupeCrbs = true
 		var totalDupes int
 		for _, v := range crbInd {
-			totalDupes += len(v)
+			totalDupes += len(v) - 1 // one of these is not a dupe
 		}
 		logrus.Debugf("groups of duplicate cluster role bindings: %v", crbDupes)
 		logrus.Debugf("total duplicate cluster role bindings: %v", totalDupes)
